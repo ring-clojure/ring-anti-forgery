@@ -13,12 +13,14 @@
       (random/base64 60)))
 
 (defn- assoc-session-token [response request token]
-  (let [old-token (get-in request [:session "__anti-forgery-token"])]
+  (let [old-token   (get-in request [:session "__anti-forgery-token"])
+        old-session (if-let [response-session (:session response)]
+                      response-session
+                      (:session request))]
     (if (= old-token token)
       response
-      (-> response
-          (assoc :session (:session request))
-          (assoc-in [:session "__anti-forgery-token"] token)))))
+      (assoc response :session
+        (assoc old-session "__anti-forgery-token" token)))))
 
 (defn- form-params [request]
   (merge (:form-params request)
