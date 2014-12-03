@@ -100,6 +100,15 @@ the one in the current session.
 You should therefore only apply this middleware to the parts of your
 application designed to be accessed through a web browser. This
 middleware should not be applied to handlers that define web services.
+For instance, in [Compojure][2] you could write:
+
+[2]: https://github.com/weavejester/compojure
+
+```clojure
+(routes
+ api-routes
+ (wrap-anti-forgery site-routes))
+```
 
 ## License
 
