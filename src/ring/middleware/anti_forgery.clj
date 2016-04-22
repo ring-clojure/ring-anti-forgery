@@ -70,6 +70,10 @@
   :read-token     - a function that takes a request and returns an anti-forgery
                     token, or nil if the token does not exist
 
+  :skip-request?  - a function that takes a request and returns a boolean
+                    indicating whether to skip that request for anti-forgery
+                    protection
+
   :error-response - the response to return if the anti-forgery token is
                     incorrect or missing
 
@@ -78,14 +82,16 @@
 
   Only one of :error-response, :error-handler may be specified."
   {:arglists '([handler] [handler options])}
-  [handler & [{:keys [read-token]
-               :or   {read-token default-request-token}
+  [handler & [{:keys [read-token skip-request?]
+               :or   {read-token default-request-token
+                      skip-request? (constantly false)}
                :as   options}]]
   {:pre [(not (and (:error-response options)
                    (:error-handler options)))]}
   (fn [request]
     (binding [*anti-forgery-token* (or (session-token request) (new-token))]
-      (if (and (not (get-request? request))
+      (if (and (not (skip-request? request))
+               (not (get-request? request))
                (not (valid-request? request read-token)))
         (handle-error options request)
         (if-let [response (handler request)]
