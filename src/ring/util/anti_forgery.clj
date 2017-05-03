@@ -8,4 +8,4 @@
   This ensures that the form it's inside won't be stopped by the anti-forgery
   middleware."
   []
-  (html (hidden-field "__anti-forgery-token" *anti-forgery-token*)))
+  (html (hidden-field anti-forgery-token-field *anti-forgery-token*)))

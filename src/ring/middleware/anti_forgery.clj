@@ -8,6 +8,9 @@
        :dynamic true}
   *anti-forgery-token*)
 
+(def ^{:doc "Default name of anti-forgery-token's field."}
+  anti-forgery-token-field "__anti-forgery-token")
+
 (defn- new-token []
   (random/base64 60))
 
@@ -31,7 +34,7 @@
          (:multipart-params request)))
 
 (defn- default-request-token [request]
-  (or (-> request form-params (get "__anti-forgery-token"))
+  (or (-> request form-params (get anti-forgery-token-field))
       (-> request :headers (get "x-csrf-token"))
       (-> request :headers (get "x-xsrf-token"))))
 
