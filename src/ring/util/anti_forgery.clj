@@ -9,3 +9,8 @@
   middleware."
   []
   (html (hidden-field "__anti-forgery-token" *anti-forgery-token*)))
+
+(defn anti-forgery
+  "Return anti-forgery token"
+  []
+  *anti-forgery-token*)
