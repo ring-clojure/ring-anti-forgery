@@ -96,14 +96,18 @@
          error-handler (make-error-handler options)]
      (fn
        ([request]
-        (let [token (find-or-create-token request)]
+        (if (some #(= (:uri request) %) (:ignored-paths options))
+         (handler request)
+         (let [token (find-or-create-token request)]
           (binding [*anti-forgery-token* token]
-            (if (valid-request? request read-token)
-              (error-handler request)
-              (add-session-token (handler request) request token)))))
+           (if (valid-request? request read-token)
+            (error-handler request)
+            (add-session-token (handler request) request token))))))
        ([request respond raise]
-        (let [token (find-or-create-token request)]
+        (if (some #(= (:uri request) %) (:ignored-paths options))
+         (handler request)
+         (let [token (find-or-create-token request)]
           (binding [*anti-forgery-token* token]
-            (if (valid-request? request read-token)
-              (error-handler request respond raise)
-              (handler request #(respond (add-session-token % request token)) raise)))))))))
+           (if (valid-request? request read-token)
+            (error-handler request respond raise)
+            (handler request #(respond (add-session-token % request token)) raise))))) )))))
