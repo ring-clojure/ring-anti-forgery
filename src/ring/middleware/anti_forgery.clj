@@ -1,12 +1,19 @@
 (ns ring.middleware.anti-forgery
   "Ring middleware to prevent CSRF attacks with an anti-forgery token."
   (:require [crypto.random :as random]
-            [crypto.equality :as crypto]))
+            [crypto.equality :as crypto]
+            [buddy.sign.jwt :as jwt]
+            [clj-time.core :as time]
+            [clj-time.coerce])
+  (:import (clojure.lang ExceptionInfo)))
 
 (def ^{:doc "Binding that stores an anti-forgery token that must be included
             in POST forms if the handler is wrapped in wrap-anti-forgery."
        :dynamic true}
   *anti-forgery-token*)
+
+(def ^:private crypt-options {:alg :rsa-oaep
+                              :enc :a128cbc-hs256})
 
 (defn- new-token []
   (random/base64 60))
@@ -14,17 +21,34 @@
 (defn- session-token [request]
   (get-in request [:session ::anti-forgery-token]))
 
-(defn- find-or-create-token [request]
-  (or (session-token request) (new-token)))
+(defn- create-encrypted-csrf-token [public-key secret expires]
+  (jwt/encrypt {:nonce   (crypto.random/base64 256)
+                :secret  secret
+                :expires (clj-time.coerce/to-long
+                           (time/plus (time/now)
+                                      expires))}
+               public-key
+               crypt-options))
 
-(defn- add-session-token [response request token]
+(defn- find-or-create-token [request {:keys [encrypted-token? public-key private-key secret expiration]
+                                      :or   {encrypted-token? false}
+                                      :as   options}]
+  (if encrypted-token?
+    (create-encrypted-csrf-token public-key secret expiration) #_"foo"
+    (or (session-token request) (new-token))))
+
+(defn- add-session-token [response request token {:keys [encrypted-token?]
+                                                  :or   {encrypted-token? false}
+                                                  :as   options}]
   (if response
-    (let [old-token (session-token request)]
-      (if (= old-token token)
-        response
-        (-> response
-            (assoc :session (:session response (:session request)))
-            (assoc-in [:session ::anti-forgery-token] token))))))
+    (if encrypted-token?
+      response
+      (let [old-token (session-token request)]
+        (if (= old-token token)
+          response
+          (-> response
+              (assoc :session (:session response (:session request)))
+              (assoc-in [:session ::anti-forgery-token] token)))))))
 
 (defn- form-params [request]
   (merge (:form-params request)
@@ -42,14 +66,32 @@
          stored-token
          (crypto/eq? user-token stored-token))))
 
+(defn- valid-encrypted-token? [private-key stored-secret request read-token]
+  (when-let [token (read-token request)]
+    (try
+      (let [{:keys [secret expires]} (jwt/decrypt token
+                                                  private-key
+                                                  crypt-options)]
+        ;; TODO: check whether throwing an exception is good enough
+        (and
+          (crypto/eq? secret stored-secret)
+          (time/before? (time/now)
+                        (clj-time.coerce/from-long expires))))
+      (catch ExceptionInfo e
+        false))))
+
 (defn- get-request? [{method :request-method}]
   (or (= method :head)
       (= method :get)
       (= method :options)))
 
-(defn- valid-request? [request read-token]
+(defn- valid-request? [request read-token {:keys [encrypted-token? private-key secret expiration]
+                                           :or   {encrypted-token? false}
+                                           :as   options}]
   (or (get-request? request)
-      (valid-token? request read-token)))
+      (if encrypted-token?
+        (valid-encrypted-token? private-key secret request read-token)
+        (valid-token? request read-token))))
 
 (def ^:private default-error-response
   {:status  403
@@ -78,14 +120,20 @@
 
   Accepts the following options:
 
-  :read-token     - a function that takes a request and returns an anti-forgery
-                    token, or nil if the token does not exist
+  :read-token       - a function that takes a request and returns an anti-forgery
+                      token, or nil if the token does not exist
 
-  :error-response - the response to return if the anti-forgery token is
-                    incorrect or missing
+  :error-response   - the response to return if the anti-forgery token is
+                      incorrect or missing
 
-  :error-handler  - a handler function to call if the anti-forgery token is
-                    incorrect or missing.
+  :error-handler    - a handler function to call if the anti-forgery token is
+                      incorrect or missing.
+
+  :encrypted-token? - defaults to false
+  :public-key       - a public key to encrypt the JWT
+  :private-key      - a private key to decrypt the JWT
+  :secret           - a secret to verify the token really is issued by our server
+  :expiration       - an expiration time for the token (as org.joda.time.ReadablePeriod, e.g. (clj-time.core/hour 1))
 
   Only one of :error-response, :error-handler may be specified."
   ([handler]
@@ -96,14 +144,14 @@
          error-handler (make-error-handler options)]
      (fn
        ([request]
-        (let [token (find-or-create-token request)]
+        (let [token (find-or-create-token request options)]
           (binding [*anti-forgery-token* token]
-            (if (valid-request? request read-token)
-              (add-session-token (handler request) request token)
+            (if (valid-request? request read-token options)
+              (add-session-token (handler request) request token options)
               (error-handler request)))))
        ([request respond raise]
-        (let [token (find-or-create-token request)]
+        (let [token (find-or-create-token request options)]
           (binding [*anti-forgery-token* token]
-            (if (valid-request? request read-token)
-              (handler request #(respond (add-session-token % request token)) raise)
+            (if (valid-request? request read-token options)
+              (handler request #(respond (add-session-token % request token options)) raise)
               (error-handler request respond raise)))))))))
