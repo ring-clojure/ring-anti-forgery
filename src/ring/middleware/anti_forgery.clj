@@ -141,17 +141,17 @@
   ([handler options]
    {:pre [(not (and (:error-response options) (:error-handler options)))]}
    (let [read-token    (:read-token options default-request-token)
-         error-handler (make-error-handler options)]
+         error-handler-fn (make-error-handler options)]
      (fn
        ([request]
         (let [token (find-or-create-token request options)]
           (binding [*anti-forgery-token* token]
             (if (valid-request? request read-token options)
               (add-session-token (handler request) request token options)
-              (error-handler request)))))
+              (error-handler-fn request)))))
        ([request respond raise]
         (let [token (find-or-create-token request options)]
           (binding [*anti-forgery-token* token]
             (if (valid-request? request read-token options)
               (handler request #(respond (add-session-token % request token options)) raise)
-              (error-handler request respond raise)))))))))
+              (error-handler-fn request respond raise)))))))))
