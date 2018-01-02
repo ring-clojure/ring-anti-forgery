@@ -72,7 +72,6 @@
       (let [{:keys [secret expires]} (jwt/decrypt token
                                                   private-key
                                                   crypt-options)]
-        ;; TODO: check whether throwing an exception is good enough
         (and
           (crypto/eq? secret stored-secret)
           (time/before? (time/now)
