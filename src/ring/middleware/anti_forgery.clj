@@ -1,54 +1,23 @@
 (ns ring.middleware.anti-forgery
   "Ring middleware to prevent CSRF attacks with an anti-forgery token."
-  (:require [crypto.random :as random]
-            [crypto.equality :as crypto]
-            [buddy.sign.jwt :as jwt]
-            [clj-time.core :as time]
-            [clj-time.coerce])
-  (:import (clojure.lang ExceptionInfo)))
+  (:require [clj-time.core :as time]
+            [clj-time.coerce]
+            [ring.middleware.anti-forgery.strategy.session :as session]))
 
-(def ^{:doc "Binding that stores an anti-forgery token that must be included
+(def ^{:doc     "Binding that stores an anti-forgery token that must be included
             in POST forms if the handler is wrapped in wrap-anti-forgery."
        :dynamic true}
-  *anti-forgery-token*)
+*anti-forgery-token*)
 
-(def ^:private crypt-options {:alg :rsa-oaep
-                              :enc :a128cbc-hs256})
 
-(defn- new-token []
-  (random/base64 60))
 
-(defn- session-token [request]
-  (get-in request [:session ::anti-forgery-token]))
 
-(defn- create-encrypted-csrf-token [public-key secret expires]
-  (jwt/encrypt {:nonce   (crypto.random/base64 256)
-                :secret  secret
-                :expires (clj-time.coerce/to-long
-                           (time/plus (time/now)
-                                      expires))}
-               public-key
-               crypt-options))
 
-(defn- find-or-create-token [request {:keys [encrypted-token? public-key private-key secret expiration]
-                                      :or   {encrypted-token? false}
-                                      :as   options}]
-  (if encrypted-token?
-    (create-encrypted-csrf-token public-key secret expiration) #_"foo"
-    (or (session-token request) (new-token))))
 
-(defn- add-session-token [response request token {:keys [encrypted-token?]
-                                                  :or   {encrypted-token? false}
-                                                  :as   options}]
-  (if response
-    (if encrypted-token?
-      response
-      (let [old-token (session-token request)]
-        (if (= old-token token)
-          response
-          (-> response
-              (assoc :session (:session response (:session request)))
-              (assoc-in [:session ::anti-forgery-token] token)))))))
+
+
+
+
 
 (defn- form-params [request]
   (merge (:form-params request)
@@ -59,38 +28,18 @@
       (-> request :headers (get "x-csrf-token"))
       (-> request :headers (get "x-xsrf-token"))))
 
-(defn- valid-token? [request read-token]
-  (let [user-token   (read-token request)
-        stored-token (session-token request)]
-    (and user-token
-         stored-token
-         (crypto/eq? user-token stored-token))))
 
-(defn- valid-encrypted-token? [private-key stored-secret request read-token]
-  (when-let [token (read-token request)]
-    (try
-      (let [{:keys [secret expires]} (jwt/decrypt token
-                                                  private-key
-                                                  crypt-options)]
-        (and
-          (crypto/eq? secret stored-secret)
-          (time/before? (time/now)
-                        (clj-time.coerce/from-long expires))))
-      (catch ExceptionInfo e
-        false))))
+
+
 
 (defn- get-request? [{method :request-method}]
   (or (= method :head)
       (= method :get)
       (= method :options)))
 
-(defn- valid-request? [request read-token {:keys [encrypted-token? private-key secret expiration]
-                                           :or   {encrypted-token? false}
-                                           :as   options}]
+(defn- valid-request? [state-management-strategy request read-token]
   (or (get-request? request)
-      (if encrypted-token?
-        (valid-encrypted-token? private-key secret request read-token)
-        (valid-token? request read-token))))
+      ((:valid-token state-management-strategy) request read-token)))
 
 (def ^:private default-error-response
   {:status  403
@@ -105,6 +54,10 @@
 (defn- make-error-handler [options]
   (or (:error-handler options)
       (constant-handler (:error-response options default-error-response))))
+
+
+
+
 
 (defn wrap-anti-forgery
   "Middleware that prevents CSRF attacks. Any POST request to the handler
@@ -128,29 +81,28 @@
   :error-handler    - a handler function to call if the anti-forgery token is
                       incorrect or missing.
 
-  :encrypted-token? - defaults to false
-  :public-key       - a public key to encrypt the JWT
-  :private-key      - a private key to decrypt the JWT
-  :secret           - a secret to verify the token really is issued by our server
-  :expiration       - an expiration time for the token (as org.joda.time.ReadablePeriod, e.g. (clj-time.core/hour 1))
+  :state-management-strategy - A state management strategy,
+                               ring.middleware.anti-forgery.strategy.session/session-sms by default.
 
   Only one of :error-response, :error-handler may be specified."
+
   ([handler]
    (wrap-anti-forgery handler {}))
   ([handler options]
    {:pre [(not (and (:error-response options) (:error-handler options)))]}
-   (let [read-token    (:read-token options default-request-token)
+   (let [state-management-strategy (get options :state-management-strategy session/session-sms)
+         read-token (:read-token options default-request-token)
          error-handler-fn (make-error-handler options)]
      (fn
        ([request]
-        (let [token (find-or-create-token request options)]
+        (let [token ((:find-or-create-token state-management-strategy) request)]
           (binding [*anti-forgery-token* token]
-            (if (valid-request? request read-token options)
-              (add-session-token (handler request) request token options)
+            (if (valid-request? state-management-strategy request read-token)
+              ((:wrap-response state-management-strategy) (handler request) request token)
               (error-handler-fn request)))))
        ([request respond raise]
-        (let [token (find-or-create-token request options)]
+        (let [token ((:find-or-create-token state-management-strategy) request)]
           (binding [*anti-forgery-token* token]
-            (if (valid-request? request read-token options)
-              (handler request #(respond (add-session-token % request token options)) raise)
+            (if (valid-request? state-management-strategy request read-token)
+              (handler request #(respond ((:wrap-response state-management-strategy) % request token)) raise)
               (error-handler-fn request respond raise)))))))))

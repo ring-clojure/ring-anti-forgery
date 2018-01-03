@@ -1,23 +1,22 @@
 (ns ring.middleware.test.anti-forgery
   (:require [ring.middleware.anti-forgery :as af]
+            [ring.middleware.anti-forgery.strategy.encrypted-token :as encrypted-token]
             [buddy.core.keys :as keys]
             [clj-time.core :as time])
   (:use clojure.test
         ring.middleware.anti-forgery
         ring.mock.request))
 
-(def ^:private create-encrypted-csrf-token #'ring.middleware.anti-forgery/create-encrypted-csrf-token)
+(def ^:private create-encrypted-csrf-token #'ring.middleware.anti-forgery.strategy.encrypted-token/create-encrypted-csrf-token)
 
-(def ^:private pubkey (keys/public-key "test-certs/pubkey.pem"))
-(def ^:private privkey (keys/private-key "test-certs/privkey.pem" "antiforgery"))
+(def ^:private pubkey (keys/public-key "dev-resources/test-certs/pubkey.pem"))
+(def ^:private privkey (keys/private-key "dev-resources/test-certs/privkey.pem" "antiforgery"))
 (def ^:private secret "secret-to-validate-token-after-decryption-to-make-sure-i-encrypted-stuff")
 (def ^:private expires-in-one-hour (time/hours 1))
 
-(def ^:private encrypted-token-options {:encrypted-token? true?
-                                        :public-key       pubkey
-                                        :private-key      privkey
-                                        :secret           secret
-                                        :expiration       expires-in-one-hour})
+(def ^:private encrypted-token-sms (encrypted-token/encrypted-token-sms pubkey privkey expires-in-one-hour secret))
+
+(def ^:private encrypted-token-options {:state-management-strategy encrypted-token-sms})
 
 (defn- status=* [handler status req]
   (= status (:status (handler req))))
@@ -56,16 +55,16 @@
       (are [status req] (status= status req)
                         403 (-> (request :post "/")
                                 ;; anti-forgery-token not decryptable with our key
-                                (assoc :form-params {"__anti-forgery-token" (create-encrypted-csrf-token pubkey (str "another-secret-" secret) expires-in-one-hour)}))))
+                                (assoc :form-params {"__anti-forgery-token" (create-encrypted-csrf-token pubkey (str "another-secret-" secret) expires-in-one-hour nil)}))))
     (testing "with expired anti-forgery-token"
       (are [status req] (status= status req)
                         403 (-> (request :post "/")
                                 ;; anti-forgery-token not decryptable with our key
-                                (assoc :form-params {"__anti-forgery-token" (create-encrypted-csrf-token pubkey secret expired-one-hour-ago)}))))
+                                (assoc :form-params {"__anti-forgery-token" (create-encrypted-csrf-token pubkey secret expired-one-hour-ago nil)}))))
     (testing "with correct anti-forgery-token. (Attention: Has different nounce, but that's ok)"
       (are [status req] (status= status req)
                         200 (-> (request :post "/")
-                                (assoc :form-params {"__anti-forgery-token" (create-encrypted-csrf-token pubkey secret expires-in-one-hour)}))))))
+                                (assoc :form-params {"__anti-forgery-token" (create-encrypted-csrf-token pubkey secret expires-in-one-hour nil)}))))))
 
 
 
@@ -132,7 +131,7 @@
              (:body response))))))
 
 (defn- valid-encrypted-token? [private-key secret token]
-  (#'ring.middleware.anti-forgery/valid-encrypted-token? private-key secret token identity))
+  (#'ring.middleware.anti-forgery.strategy.encrypted-token/valid-token? private-key secret token identity))
 
 (deftest token-binding-via-encrypted-token-test
   (letfn [(handler [request]
@@ -273,7 +272,7 @@
 
     (testing "valid token"
       (let [req (-> (request :post "/")
-                    (assoc :form-params {"__anti-forgery-token" (create-encrypted-csrf-token pubkey secret expires-in-one-hour)}))
+                    (assoc :form-params {"__anti-forgery-token" (create-encrypted-csrf-token pubkey secret expires-in-one-hour nil)}))
             resp (promise)
             ex (promise)]
         (handler req resp ex)
