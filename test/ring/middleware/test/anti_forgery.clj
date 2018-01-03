@@ -2,19 +2,22 @@
   (:require [ring.middleware.anti-forgery :as af]
             [ring.middleware.anti-forgery.strategy.encrypted-token :as encrypted-token]
             [buddy.core.keys :as keys]
-            [clj-time.core :as time])
+            [clj-time.core :as time]
+            [ring.middleware.anti-forgery.strategy :as strategy])
   (:use clojure.test
         ring.middleware.anti-forgery
         ring.mock.request))
 
-(def ^:private create-encrypted-csrf-token #'ring.middleware.anti-forgery.strategy.encrypted-token/create-encrypted-csrf-token)
+
 
 (def ^:private pubkey (keys/public-key "dev-resources/test-certs/pubkey.pem"))
 (def ^:private privkey (keys/private-key "dev-resources/test-certs/privkey.pem" "antiforgery"))
 (def ^:private secret "secret-to-validate-token-after-decryption-to-make-sure-i-encrypted-stuff")
 (def ^:private expires-in-one-hour (time/hours 1))
 
-(def ^:private encrypted-token-sms (encrypted-token/encrypted-token-sms pubkey privkey expires-in-one-hour secret))
+(def ^:private encrypted-token-sms (encrypted-token/->EncryptedTokenSMS pubkey privkey expires-in-one-hour secret))
+(defn create-encrypted-csrf-token [pubkey secret expiration _]
+  (strategy/find-or-create-token (encrypted-token/->EncryptedTokenSMS pubkey nil expiration secret) nil))
 
 (def ^:private encrypted-token-options {:state-management-strategy encrypted-token-sms})
 

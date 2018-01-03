@@ -2,6 +2,7 @@
   "Ring middleware to prevent CSRF attacks with an anti-forgery token."
   (:require [clj-time.core :as time]
             [clj-time.coerce]
+            [ring.middleware.anti-forgery.strategy :as strategy]
             [ring.middleware.anti-forgery.strategy.session :as session]))
 
 (def ^{:doc     "Binding that stores an anti-forgery token that must be included
@@ -39,7 +40,7 @@
 
 (defn- valid-request? [state-management-strategy request read-token]
   (or (get-request? request)
-      ((:valid-token state-management-strategy) request read-token)))
+      (strategy/valid-token? state-management-strategy request read-token)))
 
 (def ^:private default-error-response
   {:status  403
@@ -90,19 +91,19 @@
    (wrap-anti-forgery handler {}))
   ([handler options]
    {:pre [(not (and (:error-response options) (:error-handler options)))]}
-   (let [state-management-strategy (get options :state-management-strategy session/session-sms)
+   (let [state-management-strategy (get options :state-management-strategy (session/->SessionSMS))
          read-token (:read-token options default-request-token)
          error-handler-fn (make-error-handler options)]
      (fn
        ([request]
-        (let [token ((:find-or-create-token state-management-strategy) request)]
+        (let [token (strategy/find-or-create-token state-management-strategy request)]
           (binding [*anti-forgery-token* token]
             (if (valid-request? state-management-strategy request read-token)
-              ((:wrap-response state-management-strategy) (handler request) request token)
+              (strategy/wrap-response state-management-strategy (handler request) request token)
               (error-handler-fn request)))))
        ([request respond raise]
-        (let [token ((:find-or-create-token state-management-strategy) request)]
+        (let [token (strategy/find-or-create-token state-management-strategy request)]
           (binding [*anti-forgery-token* token]
             (if (valid-request? state-management-strategy request read-token)
-              (handler request #(respond ((:wrap-response state-management-strategy) % request token)) raise)
+              (handler request #(respond (strategy/wrap-response state-management-strategy % request token)) raise)
               (error-handler-fn request respond raise)))))))))
