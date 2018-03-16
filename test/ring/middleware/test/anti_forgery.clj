@@ -105,6 +105,20 @@
     (is (contains? session ::af/anti-forgery-token))
     (is (= (session "foo") "bar"))))
 
+(deftest session-in-response-does-not-destroy-token-test
+  (let [handler    (wrap-anti-forgery (fn [req]
+                                        {:status  200
+                                         :headers {}
+                                         :session {"resp" "foo"}
+                                         :body    nil}))
+        valid-post (-> (mock/request :post "/")
+                       (assoc :session {"req"                   "foo"
+                                        ::af/anti-forgery-token "foo"})
+                       (assoc :headers {"x-csrf-token" "foo"}))]
+    (is (= (:session (handler valid-post))
+           {::af/anti-forgery-token "foo"
+            "resp"                  "foo"}))))
+
 (deftest custom-error-response-test
   (let [response   {:status 200, :headers {}, :body "Foo"}
         error-resp {:status 500, :headers {}, :body "Bar"}
