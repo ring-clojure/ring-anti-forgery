@@ -136,6 +136,30 @@ You should therefore only apply this middleware to the parts of your
 application designed to be accessed through a web browser. This
 middleware should not be applied to handlers that define web services.
 
+Furthermore, if you use the session strategy, you must be aware of a gotcha
+associated with all ring session apps. You almost never want to write a handler
+that looks like this:
+
+```clojure
+(defn handler [req]
+  {:status 200
+   :headers {}
+   :body "ok"
+   :session {"foo" "bar"}})
+```
+
+This handler will remove the anti-forgery token from the response, meaning
+future requests will fail the anti-forgery check and receive a 403. Instead, you
+must copy the session from the request:
+
+```clojure
+(defn handler [req]
+  {:status 200
+   :headers {}
+   :body "ok"
+   :session (assoc (:session req) "foo" "bar")})
+```
+
 ## License
 
 Copyright © 2018 James Reeves
