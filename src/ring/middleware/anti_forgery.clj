@@ -47,6 +47,15 @@
   (or (:error-handler options)
       (constant-handler (:error-response options default-error-response))))
 
+(defn- escaped-uri?
+  ([regxs uri]
+   (if (vector? regxs)
+     (some (fn [regx]
+             (if-not (nil? regx)
+               (re-matches regx uri))) regxs)
+     (if-not (nil? regxs)
+       (re-matches regxs uri)))))
+
 (defn wrap-anti-forgery
   "Middleware that prevents CSRF attacks. Any POST request to the handler
   returned by this function must contain a valid anti-forgery token, or else an
@@ -77,6 +86,9 @@
                     ring.middleware.anti-forgery.strategy/Strategy protocol
                     (defaults to the session strategy:
                     ring.middleware.anti-forgery.session/session-strategy)
+  :escaped-regx   - a regular expression for uir that do not need check token
+                    for example some callback uri
+                    [callback-uri-regx1 callback-uri-regx2]
 
   Only one of :error-response, :error-handler may be specified."
   ([handler]
@@ -85,17 +97,20 @@
    {:pre [(not (and (:error-response options) (:error-handler options)))]}
    (let [read-token    (:read-token options default-request-token)
          strategy      (:strategy options (session/session-strategy))
+         escaped-regx (:escaped-regx options)
          error-handler (make-error-handler options)]
      (fn
        ([request]
-        (if (valid-request? strategy request read-token)
+        (if (or (escaped-uri? escaped-regx (:uri request))
+                (valid-request? strategy request read-token))
           (let [token (strategy/get-token strategy request)]
             (binding [*anti-forgery-token* token]
               (when-let [response (handler (assoc request :anti-forgery-token token))]
                 (strategy/write-token strategy request response token))))
           (error-handler request)))
        ([request respond raise]
-        (if (valid-request? strategy request read-token)
+        (if (or (escaped-uri? escaped-regx (:uri request))
+                (valid-request? strategy request read-token))
           (let [token (strategy/get-token strategy request)]
             (binding [*anti-forgery-token* token]
               (handler (assoc request :anti-forgery-token token)
