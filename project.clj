@@ -3,7 +3,7 @@
   :url "https://github.com/ring-clojure/ring-anti-forgery"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :dependencies [[org.clojure/clojure "1.7.0"]
+  :dependencies [[org.clojure/clojure "1.9.0"]
                  [crypto-random "1.2.1"]
                  [crypto-equality "1.0.1"]
                  [hiccup "1.0.5"]]
