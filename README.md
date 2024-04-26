@@ -7,9 +7,13 @@ the [synchronizer token][] pattern.
 [csrf]: https://en.wikipedia.org/wiki/Cross-site_request_forgery
 [synchronizer token]: https://www.owasp.org/index.php/Cross-Site_Request_Forgery_(CSRF)_Prevention_Cheat_Sheet#Synchronizer_.28CSRF.29_Tokens
 
-## Install
+## Installation
 
-Add the following dependency to your `project.clj`:
+Add the following dependency to your `deps.edn` file:
+
+    ring/ring-anti-forgery {:mvn/version "1.3.0"}
+
+Or to your Leiningen project file:
 
     [ring/ring-anti-forgery "1.3.0"]
 
