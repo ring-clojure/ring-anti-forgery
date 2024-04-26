@@ -1,6 +1,4 @@
-# Ring-Anti-Forgery
-
-[![Build Status](https://travis-ci.org/ring-clojure/ring-anti-forgery.svg?branch=master)](https://travis-ci.org/ring-clojure/ring-anti-forgery)
+# Ring-Anti-Forgery [![Build Status](https://github.com/ring-clojure/ring-anti-forgery/actions/workflows/test.yml/badge.svg)](https://github.com/ring-clojure/ring-anti-forgery/actions/workflows/test.yml)
 
 [Ring][] middleware that prevents [CSRF][] attacks. By default this uses
 the [synchronizer token][] pattern.
