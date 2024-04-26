@@ -11,11 +11,11 @@ the [synchronizer token][] pattern.
 
 Add the following dependency to your `deps.edn` file:
 
-    ring/ring-anti-forgery {:mvn/version "1.3.0"}
+    ring/ring-anti-forgery {:mvn/version "1.3.1"}
 
 Or to your Leiningen project file:
 
-    [ring/ring-anti-forgery "1.3.0"]
+    [ring/ring-anti-forgery "1.3.1"]
 
 ## Usage
 
