@@ -43,6 +43,29 @@ The token will be used to validate the request is accessible via the
 `*anti-forgery-token*` var. The token is also placed in the request
 under the `:anti-forgery-token` key.
 
+### Safe headers
+
+When making HTTP requests via `XMLHttpRequest` in JavaScript, a custom
+header can be added to the request. If it is, the request is
+'preflighted'; that is, a CORS request will be sent to the server by the
+browser to check to see if the domain is valid. This ensures that the
+request cannot be used in a CSRF attack (see the [OWASP CSRF
+Cheatsheet][owasp_custom_headers]).
+
+The `wrap-anti-forgery` middleware has a `:safe-header` option to check
+for a custom header. If this header exists and is not blank, then the
+request is deemed safe and the anti-forgery token is unnecessary. By
+default this option is `nil` and not checked for.
+
+```clojure
+(def app
+  (-> handler
+      (wrap-anti-forgery {:safe-header "X-CSRF-Protection"})
+      (wrap-session)))
+```
+
+[owasp_custom_headers]: https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#employing-custom-request-headers-for-ajaxapi
+
 ### Custom token reader
 
 By default the middleware looks for the anti-forgery token in the

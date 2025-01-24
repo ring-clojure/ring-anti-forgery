@@ -1,6 +1,7 @@
 (ns ring.middleware.anti-forgery
   "Ring middleware to prevent CSRF attacks."
-  (:require [ring.middleware.anti-forgery.strategy :as strategy]
+  (:require [clojure.string :as str]
+            [ring.middleware.anti-forgery.strategy :as strategy]
             [ring.middleware.anti-forgery.session :as session]))
 
 (def ^{:doc "Binding that stores an anti-forgery token that must be included
@@ -28,8 +29,10 @@
       (= method :get)
       (= method :options)))
 
-(defn- valid-request? [strategy request read-token]
+(defn- valid-request? [strategy request read-token safe-header]
   (or (get-request? request)
+      (when safe-header
+        (not (str/blank? (get-in request [:headers safe-header]))))
       (when-let [token (read-token request)]
         (strategy/valid-token? strategy request token))))
 
@@ -72,6 +75,10 @@
   :error-handler  - a handler function to call if the anti-forgery token is
                     incorrect or missing
 
+  :safe-header    - a header that, if found on the request, will make this
+                    middleware treat the request as safe without the need for
+                    a valid anti-forgery token
+
   :strategy       - a strategy for creating and validating anti-forgety tokens,
                     which must satisfy the
                     ring.middleware.anti-forgery.strategy/Strategy protocol
@@ -85,17 +92,18 @@
    {:pre [(not (and (:error-response options) (:error-handler options)))]}
    (let [read-token    (:read-token options default-request-token)
          strategy      (:strategy options (session/session-strategy))
-         error-handler (make-error-handler options)]
+         error-handler (make-error-handler options)
+         safe-header   (some-> (:safe-header options) str/lower-case)]
      (fn
        ([request]
-        (if (valid-request? strategy request read-token)
+        (if (valid-request? strategy request read-token safe-header)
           (let [token (strategy/get-token strategy request)]
             (binding [*anti-forgery-token* token]
               (when-let [response (handler (assoc request :anti-forgery-token token))]
                 (strategy/write-token strategy request response token))))
           (error-handler request)))
        ([request respond raise]
-        (if (valid-request? strategy request read-token)
+        (if (valid-request? strategy request read-token safe-header)
           (let [token (strategy/get-token strategy request)]
             (binding [*anti-forgery-token* token]
               (handler (assoc request :anti-forgery-token token)

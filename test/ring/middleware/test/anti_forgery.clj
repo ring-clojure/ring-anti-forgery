@@ -189,3 +189,31 @@
         (handler req resp ex)
         (is (not (realized? ex)))
         (is (= (:status @resp) 200))))))
+
+(deftest safe-header-test
+  (testing "sync handlers"
+    (let [response {:status 200, :headers {}, :body "Foo"}
+          handler  (wrap-anti-forgery (constantly response)
+                                      {:safe-header "X-CSRF-Protection"})]
+      (are [status req] (= (:status (handler req)) status)
+        403 (mock/request :post "/")
+        200 (-> (mock/request :post "/")
+                (mock/header "X-CSRF-Protection" "1")))))
+
+  (testing "async handlers"
+    (let [response {:status 200, :headers {}, :body "Foo"}
+          handler  (wrap-anti-forgery (fn [_ respond _] (respond response))
+                                      {:safe-header "X-CSRF-Protection"})]
+      (let [req  (mock/request :post "/")
+            resp (promise)
+            ex   (promise)]
+        (handler req resp ex)
+        (is (not (realized? ex)))
+        (is (= (:status @resp) 403)))
+      (let [req  (-> (mock/request :post "/")
+                     (mock/header "X-CSRF-Protection" "1"))
+            resp (promise)
+            ex   (promise)]
+        (handler req resp ex)
+        (is (not (realized? ex)))
+        (is (= (:status @resp) 200))))))
