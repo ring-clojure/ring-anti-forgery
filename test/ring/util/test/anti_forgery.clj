@@ -7,5 +7,9 @@
   (binding [*anti-forgery-token* "abc"]
     (is (= (anti-forgery-field)
            (str "<input id=\"__anti-forgery-token\" name=\"__anti-forgery-token\""
-                " type=\"hidden\" value=\"abc\" />")))))
+                " type=\"hidden\" value=\"abc\" />"))))
+  (binding [*anti-forgery-token* "<\"&"]
+    (is (= (anti-forgery-field)
+           (str "<input id=\"__anti-forgery-token\" name=\"__anti-forgery-token\""
+                " type=\"hidden\" value=\"&lt;&quot;&amp;\" />")))))
 
