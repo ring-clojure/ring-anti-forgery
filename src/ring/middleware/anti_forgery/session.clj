@@ -13,9 +13,12 @@
 (defn- session-token [request]
   (get-in request [:session :ring.middleware.anti-forgery/anti-forgery-token]))
 
+(defn- nil-session? [response]
+  (and (contains? response :session) (nil? (:session response))))
+
 (deftype SessionStrategy []
   strategy/Strategy
-  (get-token [this request]
+  (get-token [_ request]
     (or (session-token request)
         (random-base64 60)))
 
@@ -23,15 +26,17 @@
     (when-let [stored-token (session-token request)]
       (crypto/eq? token stored-token)))
 
-  (write-token [this request response token]
-    (let [old-token (session-token request)]
-      (if (= old-token token)
-        response
-        (-> response
-            (assoc :session (:session response (:session request)))
-            (assoc-in
-              [:session :ring.middleware.anti-forgery/anti-forgery-token]
-              token))))))
+  (write-token [_ request response token]
+    (if (nil-session? response)
+      response
+      (let [old-token (session-token request)]
+        (if (= old-token token)
+          response
+          (-> response
+              (assoc :session (:session response (:session request)))
+              (assoc-in
+               [:session :ring.middleware.anti-forgery/anti-forgery-token]
+               token)))))))
 
 (defn session-strategy
   "Implements a synchronizer token pattern strategy, suitable for passing to

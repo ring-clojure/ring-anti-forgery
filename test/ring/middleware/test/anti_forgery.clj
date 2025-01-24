@@ -120,6 +120,13 @@
     (is (contains? session ::af/anti-forgery-token))
     (is (= (session "foo") "bar"))))
 
+(deftest nil-session-response-test
+  (let [response  {:status 200 :headers {} :session nil :body nil}
+        handler   (wrap-anti-forgery (constantly response))
+        response' (handler (mock/request :get "/"))]
+    (is (contains? response' :session))
+    (is (nil? (:session response')))))
+
 (deftest custom-error-response-test
   (let [response   {:status 200, :headers {}, :body "Foo"}
         error-resp {:status 500, :headers {}, :body "Bar"}
