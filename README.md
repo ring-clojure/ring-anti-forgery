@@ -156,11 +156,29 @@ third-party strategies already exist:
 ## Caveats
 
 This middleware will prevent all HTTP methods except for GET and HEAD
-from accessing your handler without a valid anti-forgery token.
+from accessing your handler without a valid anti-forgery token, or a
+custom header if the `:safe-header` option is set.
 
 You should therefore only apply this middleware to the parts of your
 application designed to be accessed through a web browser. This
-middleware should not be applied to handlers that define web services.
+middleware should not be applied to handlers that define web services
+intended for access outside of the browser.
+
+Also note that the default session strategy modifies the session. As
+with all Ring applications, care should be taken not to override the
+request session:
+
+```clojure
+;; This will overwrite all existing values in the session
+(defn bad-handler [_request]
+  {:status 200, :headers {}, :body "foo = 1"
+   :session {:foo 1}})
+
+;; This will only update the :foo key in the session
+(defn good-handler [{:keys [session]}]
+  {:status 200, :headers {}, :body "foo = 1"
+   :session (assoc session :foo 1)})
+```
 
 ## License
 
